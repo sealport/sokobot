@@ -1,7 +1,10 @@
 
 package solver;
 
+import java.util.ArrayDeque;
 import java.util.EnumSet;
+import java.util.HashSet;
+import java.util.Queue;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -30,19 +33,30 @@ public class SokoBot {
 
   public String solveSokobanPuzzle(int width, int height, char[][] mapData, char[][] itemsData) {
     State initialState = State.fromLevel(mapData, itemsData);
-    Set<Move> legalMoves = computeLegalMoves(initialState);
-    return legalMoves.stream()
-        .map(move -> String.valueOf(move.toCommand()))
-        .collect(Collectors.joining());
-  }
 
-  public Set<Move> computeLegalMoves(State state) {
-    EnumSet<Move> legalMoves = EnumSet.noneOf(Move.class);
-    for (Move move : Move.values()) {
-      if (move.isLegal(state)) {
-        legalMoves.add(move);
+    Queue<Node> queue = new ArrayDeque<>();
+    Set<State> visited = new HashSet<>();
+
+    queue.add(new Node(initialState, ""));
+    visited.add(initialState);
+
+    while (!queue.isEmpty()) {
+      Node current = queue.poll();
+
+      if (current.state.isGoalState()) {
+        return current.path; 
+      }
+
+      for (Move move : Move.values()) {
+        move.tryApply(current.state).ifPresent(nextState -> {
+          if (!visited.contains(nextState)) {
+            visited.add(nextState);
+            queue.add(new Node(nextState, current.path + move.toCommand()));
+          }
+        });
       }
     }
-    return legalMoves;
+
+    return "";
   }
 }
