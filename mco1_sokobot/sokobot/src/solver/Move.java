@@ -38,10 +38,6 @@ public enum Move {
     }
   }
 
-  public boolean isLegal(State state) {
-    return tryApply(state).isPresent();
-  }
-
   public Optional<State> tryApply(State state) {
     int targetRow = state.getPlayerRow() + rowDelta;
     int targetColumn = state.getPlayerColumn() + columnDelta;
