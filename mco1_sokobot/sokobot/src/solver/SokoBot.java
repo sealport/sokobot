@@ -1,126 +1,142 @@
+/**
+ * Last Names: Follero, Garcia, Guinto, Mendoza, Prose
+ * Section: S18
+ * @version October 24, 2025
+ */
+
 package solver;
 
 import java.awt.Point;
-import java.util.ArrayDeque;
 import java.util.Comparator;
-import java.util.EnumSet;
-import java.util.HashMap;
 import java.util.HashSet;
-import java.util.LinkedList;
-import java.util.Map;
 import java.util.PriorityQueue;
-import java.util.Queue;
 import java.util.Set;
 import java.util.stream.Collectors;
-
 import reader.MapData;
 
+/**
+ * This solves the Sokoban puzzles.
+ * It finds the shortest sequence of moves to push the crates using a priority
+ * queue with a heuristic.
+ */
 public class SokoBot {
-  public String solveSokobanPuzzle(int width, int height, char[][] mapData, char[][] itemsData) {
-    State initialState = State.fromLevel(mapData, itemsData, width, height);
+    /**
+     * Solves the Sokoban puzzle given the map and initial crate positions.
+     * 
+     * @param width     Width of the map
+     * @param height    Height of the map
+     * @param mapData   2D char array representing the map
+     * @param itemsData 2D char array representing the player and crates
+     * @return          A string representing the sequence of moves to solve the puzzle
+     */
+    public String solveSokobanPuzzle(int width, int height, char[][] mapData, char[][] itemsData) {
+        State initialState = State.fromLevel(mapData, itemsData, width, height);
 
-    Set<Point> deadlockSpace = findDeadlockSpace(mapData, itemsData, width, height); // new HashSet<>()
+        // Precompute deadlock spaces
+        Set<Point> deadlockSpace = findDeadlockSpace(mapData, itemsData, width, height);
 
-    PriorityQueue<Node> queue = makeQueue();
-    Set<State> visited = new HashSet<>();
+        PriorityQueue<Node> queue = makeQueue();    // Priority queue for A* search
+        Set<State> visited = new HashSet<>();       // Set of visited states
 
-    queue.add(new Node(initialState, ""));
-    visited.add(initialState);
+        queue.add(new Node(initialState, ""));  // Add the initial state
+        visited.add(initialState);                   // Mark initial state as visited
 
-    while (!queue.isEmpty()) {
-      Node current = queue.poll();
+        while (!queue.isEmpty()) {
+            Node current = queue.poll();        // Get node with the lowest cost
 
-      if (current.state.isGoalState()) {
-        System.out.println(current.path); // NOTE: this is used for checking, not sure
-        return current.path; 
-      }
+            if (current.state.isGoalState())    // Check if all crates are on goals
+                return current.path; 
 
-      for (Move move : Move.values()) {
-        move.tryApply(current.state).ifPresent(nextState -> {
-          if (!visited.contains(nextState) 
-              && !isInDeadlock(deadlockSpace, nextState)) {
+            // Try all possible moves
+            for (Move move : Move.values()) {
+                move.tryApply(current.state).ifPresent(nextState -> {
+                    if (!visited.contains(nextState) 
+                        && !isInDeadlock(deadlockSpace, nextState)) {
 
-            visited.add(nextState);
-            queue.add(new Node(nextState, current.path + move.toCommand()));
-          }
-        });
-      }
+                        // Mark as visited and add to queue
+                        visited.add(nextState);
+                        queue.add(new Node(nextState, current.path + move.toCommand()));
+                    }
+                });
+            }
+        }
+
+        return "";
     }
 
-    return "";
-  }
-
-  public static PriorityQueue<Node> makeQueue() {
-    return new PriorityQueue<>(1,
-      Comparator.comparingDouble(n -> n.getCost())
-    );
-  }
-
-  public static boolean isInDeadlock(Set<Point> deadlockSpace, State nextState) {
-    Set<Point> crates = nextState.getCrates();
-
-    for (Point crate : crates) {
-      if(deadlockSpace.contains(crate))
-        return true;
+    /**
+     * Creates a priority queue for Node objects sorted by their cost.
+     * 
+     * @return  A priority queue
+     */
+    public static PriorityQueue<Node> makeQueue() {
+        return new PriorityQueue<>(1,
+          Comparator.comparingDouble(n -> n.getCost()));
     }
 
-    return false;
-  }
+    /**
+     * Checks whether a state is in a deadlock.
+     * 
+     * @param deadlockSpace   Set of points representing corner deadlocks
+     * @param nextState       The state to check
+     * @return                true if state is deadlocked, false otherwise
+     */
+    public static boolean isInDeadlock(Set<Point> deadlockSpace, State nextState) {
+        Set<Point> goals = nextState.getGoals();
+        boolean[][] crateMap = new boolean[nextState.getMap().length][nextState.getMap()[0].length];
+        boolean right, down, diag;
 
-  public Set<Point> findDeadlockSpace(char[][] mapData, char[][] itemsData, int width, int height)
-  {
-      int i, j;
-      char item, tile;
-      boolean checkUp, checkDown, checkLeft, checkRight;
+        // Build crate map for quick lookup of crates
+        for (Point crate : nextState.getCrates()) 
+          crateMap[crate.y][crate.x] = true;
 
-      Set<Point> deadlockSpaces = new HashSet<>();
+        for (Point crate : nextState.getCrates()) {
+            if (deadlockSpace.contains(crate))    // Corner deadlocks
+                return true;
 
-      for (i = 0 ; i < height ; i++) {
-          for (j = 0 ; j < width ; j++) {
-              item = itemsData[i][j];
-              tile = mapData[i][j];
+            if (goals.contains(crate))            // Skip crates on goals
+                continue;  
+        }
 
-              if (tile == '#' || tile == '.') {
-                  continue;
-              }
+        return false;
+    }
 
-              if (i > 0 && mapData[i - 1][j] == '#') {
-                  checkUp = true;
-              }
-              else {
-                  checkUp = false;
-              }
+    /**
+     * Finds deadlock positions on the map.
+     * 
+     * @param mapData     Map layout
+     * @param itemsData   Positions of player and crates
+     * @param width       Width of map
+     * @param height      Height of map
+     * @return            Set of points representing deadlock positions
+     */
+    public Set<Point> findDeadlockSpace(char[][] mapData, char[][] itemsData, int width, int height) {
+        int i, j;
+        char tile;
+        boolean up, down, left, right;
 
-              if (i < height - 1 && mapData[i + 1][j] == '#') {
-                  checkDown = true;
-              }
-              else {
-                  checkDown = false;
-              }
+        Set<Point> deadlockSpaces = new HashSet<>();
 
-              if (j > 0 && mapData[i][j - 1] == '#') {
-                  checkLeft = true;
-              }
-              else {
-                  checkLeft = false;
-              }
+        for (i = 0; i < height; i++) {
+            for (j = 0; j < width; j++) {
+                tile = mapData[i][j];
 
-              if (j < width - 1 && mapData[i][j + 1] == '#') {
-                  checkRight = true;
-              }
-              else {
-                  checkRight = false;
-              }
+                // Skips goals
+                if (tile == '#' || tile == '.')
+                    continue; 
 
-              if ((checkUp && checkLeft) || (checkUp && checkRight) || (checkDown && checkLeft) || (checkDown && checkRight))
-              {
-                deadlockSpaces.add(new Point(j, i));
-              }
+                // Checks surrounding walls
+                up    = i > 0 && mapData[i - 1][j] == '#';
+                down  = i < height - 1 && mapData[i + 1][j] == '#';
+                left  = j > 0 && mapData[i][j - 1] == '#';
+                right = j < width - 1 && mapData[i][j + 1] == '#';
 
-          }
-      }
-
-      return deadlockSpaces;
-  }
-  
+                // Corner deadlocks
+                if ((up && left) || (up && right) || (down && left) || (down && right)) {
+                    deadlockSpaces.add(new Point(j, i));
+                }
+            }
+        }
+        return deadlockSpaces;
+    }
 }
